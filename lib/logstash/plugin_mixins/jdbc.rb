@@ -67,6 +67,23 @@ module LogStash::PluginMixins::Jdbc
     # The amount of seconds to wait to acquire a connection before raising a PoolTimeoutError (default 5)
     config :jdbc_pool_timeout, :validate => :number, :default => 5
 
+    # Paginator properties
+    # Paginator will add a SQL clause to your SQL statement like this: 'WHERE id > X AND id < Y' to
+    # effectively navigate through the rows in a table
+
+    # The ID where the paginator will start
+    config :paginator_start, validate: :number, default: 0
+
+    # The quantity of rows that you want to get per query
+    config :paginator_step, validate: :number, default: 10000
+
+    # The ID where you want to stop
+    config :paginator_end, validate: :number
+
+    # Makes the paginator sleep these quantity in seconds after each query
+    # Useful for testing purposes
+    config :paginator_sleep, validate: :number, default: 0
+
     # Timezone conversion.
     # SQL does not allow for timezone data in timestamp fields.  This plugin will automatically
     # convert your SQL timestamp fields to Logstash timestamps, in relative UTC time in ISO8601 format.
@@ -172,26 +189,39 @@ module LogStash::PluginMixins::Jdbc
   public
   def execute_statement(statement, parameters)
     success = false
-    begin
-      parameters = symbolized_params(parameters)
-      query = @database[statement, parameters]
-      @logger.debug? and @logger.debug("Executing JDBC query", :statement => statement, :parameters => parameters, :count => query.count)
-      @sql_last_start = Time.now.utc
 
-      if @jdbc_paging_enabled
-        query.each_page(@jdbc_page_size) do |paged_dataset|
-          paged_dataset.each do |row|
+    @logger.debug? and @logger.debug("Starting paginator", steps: @paginator_step, start: @paginator_start, end: @paginator_end)
+    start_id = @paginator_start
+    end_id = @paginator_end
+    current_id = start_id
+
+    while current_id < end_id
+      modified_statement = "#{statement} WHERE id > #{current_id} AND id < #{current_id + @paginator_step}"
+
+      begin
+        parameters = symbolized_params(parameters)
+        query = @database[modified_statement, parameters]
+        @logger.debug? and @logger.debug("Executing JDBC query", :statement => modified_statement, :parameters => parameters, :count => query.count)
+        @sql_last_start = Time.now.utc
+
+        if @jdbc_paging_enabled
+          query.each_page(@jdbc_page_size) do |paged_dataset|
+            paged_dataset.each do |row|
+              yield extract_values_from(row)
+            end
+          end
+        else
+          query.each do |row|
             yield extract_values_from(row)
           end
         end
-      else
-        query.each do |row|
-          yield extract_values_from(row)
-        end
+        success = true
+      rescue Sequel::DatabaseConnectionError, Sequel::DatabaseError => e
+        @logger.warn("Exception when executing JDBC query", :exception => e)
       end
-      success = true
-    rescue Sequel::DatabaseConnectionError, Sequel::DatabaseError => e
-      @logger.warn("Exception when executing JDBC query", :exception => e)
+
+      current_id = current_id + @paginator_step
+      sleep @paginator_sleep if @paginator_sleep > 0
     end
     return success
   end
