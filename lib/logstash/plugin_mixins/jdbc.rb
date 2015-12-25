@@ -190,7 +190,7 @@ module LogStash::PluginMixins::Jdbc
   def execute_statement(statement, parameters)
     success = false
 
-    @logger.debug? and @logger.debug("Starting paginator", steps: @paginator_step, start: @paginator_start, end: @paginator_end)
+    @logger.info("Starting paginator", steps: @paginator_step, start: @paginator_start, end: @paginator_end)
     start_id = @paginator_start
     end_id = @paginator_end
     current_id = start_id
@@ -202,6 +202,7 @@ module LogStash::PluginMixins::Jdbc
         parameters = symbolized_params(parameters)
         query = @database[modified_statement, parameters]
         @logger.debug? and @logger.debug("Executing JDBC query", :statement => modified_statement, :parameters => parameters, :count => query.count)
+        @logger.info("Indexing", from: current_id, to: (current_id + @paginator_step))
         @sql_last_start = Time.now.utc
 
         if @jdbc_paging_enabled
