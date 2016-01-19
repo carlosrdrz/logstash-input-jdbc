@@ -169,12 +169,20 @@ class LogStash::Inputs::Jdbc < LogStash::Inputs::Base
 
       @scheduler.join
     else
-      execute_query(queue)
+      @shutdown_requested = false
+      @thread = Thread.new do
+        execute_query(queue)
+      end
     end
   end # def run
 
   def stop
-    @scheduler.stop if @scheduler
+    if @scheduler
+      @scheduler.stop
+    else
+      @shutdown_requested = true
+      @thread.join
+    end
 
     # update state file for next run
     if @record_last_run

@@ -222,7 +222,13 @@ module LogStash::PluginMixins::Jdbc
       end
 
       current_id = current_id + @paginator_step
-      sleep @paginator_sleep if @paginator_sleep > 0
+
+      if @shutdown_requested
+        @logger.info('Ending indexing process', next_start_at_id: current_id)
+        break
+      else
+        sleep @paginator_sleep if @paginator_sleep > 0
+      end
     end
     return success
   end
