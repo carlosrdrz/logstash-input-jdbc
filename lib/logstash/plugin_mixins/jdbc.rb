@@ -84,6 +84,9 @@ module LogStash::PluginMixins::Jdbc
     # Useful for testing purposes
     config :paginator_sleep, validate: :number, default: 0
 
+    # The name of the column that will be used to paginator_sleep
+    config :paginator_column, validate: :string, default: 'id'
+
     # Timezone conversion.
     # SQL does not allow for timezone data in timestamp fields.  This plugin will automatically
     # convert your SQL timestamp fields to Logstash timestamps, in relative UTC time in ISO8601 format.
@@ -196,7 +199,7 @@ module LogStash::PluginMixins::Jdbc
     current_id = start_id
 
     while current_id < end_id
-      modified_statement = "#{statement} WHERE id > #{current_id} AND id < #{current_id + @paginator_step}"
+      modified_statement = "#{statement} WHERE #{@paginator_column} > #{current_id} AND #{@paginator_column} < #{current_id + @paginator_step}"
 
       begin
         parameters = symbolized_params(parameters)
