@@ -173,6 +173,7 @@ class LogStash::Inputs::Jdbc < LogStash::Inputs::Base
       @thread = Thread.new do
         execute_query(queue)
       end
+      @thread.join
     end
   end # def run
 
